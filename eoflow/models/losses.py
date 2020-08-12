@@ -55,6 +55,51 @@ class CategoricalCrossEntropy(Loss):
         return loss
 
 
+class CategoricalCrossEntropyZeroWeights(Loss):
+    """ Wrapper class for cross-entropy with class weights """
+    def __init__(self, from_logits=True, class_weights=None, name='CrossEntropyZeroWeights'):
+        """Categorical cross-entropy.
+
+        :param from_logits: Whether predictions are logits or softmax, defaults to True
+        :type from_logits: bool
+        :param class_weights: Array of class weights to be applied to loss. Needs to be of `n_classes` length
+        :type class_weights: np.array
+        :param name: name of the loss, defaults to 'CrossEntropyZeroWeights'
+        :type name: str
+        """
+        super().__init__(reduction=Reduction.SUM, name=name)
+
+        self.from_logits = from_logits
+        self.class_weights = class_weights
+
+    def call(self, y_true, y_pred):
+        # Perform softmax
+        if self.from_logits:
+            y_pred = tf.nn.softmax(y_pred)
+
+        # Clip the prediction value to prevent NaN's and Inf's
+        epsilon = tf.keras.backend.epsilon()
+        y_pred = tf.clip_by_value(y_pred, epsilon, 1.)
+
+        # Calculate Cross Entropy
+        loss = -y_true * tf.math.log(y_pred)
+
+        # Multiply cross-entropy with class-wise weights
+        if self.class_weights is not None:
+            loss = tf.multiply(loss, self.class_weights)
+            pixel_weights = tf.reduce_sum(tf.multiply(
+                tf.cast(y_true, loss.dtype), self.class_weights),
+                                          axis=-1)
+            denom = tf.math.count_nonzero(pixel_weights, dtype=loss.dtype)   
+        else:
+            denom = tf.cast(tf.reduce_sum(tf.shape(loss)[:-1]), loss.dtype)
+
+        # Sum over classes
+        loss = tf.reduce_sum(loss, axis=-1)
+        loss = tf.divide(loss, denom)
+        return loss
+
+
 class CategoricalFocalLoss(Loss):
     """ Categorical version of focal loss.
 

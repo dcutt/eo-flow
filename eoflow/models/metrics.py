@@ -1,6 +1,6 @@
 import tensorflow as tf
 import tensorflow_addons as tfa
-
+import numpy as np
 
 class InitializableMetric(tf.keras.metrics.Metric):
     """ Metric that has to be initialized from model configuration. """
@@ -72,7 +72,116 @@ class MeanIoU(InitializableMetric):
 
         return self.metric.get_config()
 
+class MeanIoUZeroWeights(InitializableMetric):
+    """ Computes mean intersection over union metric for semantic segmentation.
+    Uses config class_weights to set element wise sample_weight.
+    Wraps keras MeanIoU to work on logits. """
 
+    def __init__(self, default_max_classes=32, name='mean_iou_zero_weights'):
+        """ Creates MeanIoU metric
+
+        :param default_max_classes: Default value for max number of classes. Required by Keras MeanIoU.
+                                    Must be greater or equal to the actual number of classes.
+                                    Will not be used if n_classes is in model configuration. Defaults to 32.
+        :type default_max_classes: int
+        :param name: Name of the metric
+        :type name: str
+        """
+
+        super().__init__(name=name, dtype=tf.float32)
+        self.default_max_classes = default_max_classes
+        self.metric = None
+        self.class_weights = None
+
+    def init_from_config(self, model_config=None):
+        super().init_from_config(model_config)
+
+        if model_config is not None and 'class_weights' in model_config:
+            self.class_weights = model_config['class_weights']
+        
+        if model_config is not None and 'n_classes' in model_config:
+            self.metric = tf.keras.metrics.MeanIoU(num_classes=model_config['n_classes'])
+        else:
+            print("n_classes not found in model config or model config not provided. Using default max value.")
+            self.metric = tf.keras.metrics.MeanIoU(num_classes=self.default_max_classes)
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        self.assert_initialized()
+
+        y_pred_c = tf.argmax(y_pred, axis=-1)
+        y_true_c = tf.argmax(y_true, axis=-1)
+
+        if self.class_weights is not None:
+            sample_weight = tf.reduce_sum(tf.multiply(
+                tf.cast(y_true, y_pred.dtype), self.class_weights),
+                                          axis=-1)
+
+        return self.metric.update_state(y_true_c, y_pred_c, sample_weight)
+
+    def result(self):
+        self.assert_initialized()
+
+        return self.metric.result()
+
+    def reset_states(self):
+        self.assert_initialized()
+
+        return self.metric.reset_states()
+
+    def get_config(self):
+        self.assert_initialized()
+
+        return self.metric.get_config()
+
+class CategoricalAccuracyZeroWeights(InitializableMetric):
+    """ Computes categorical accuracy for semantic segmentation.
+    Uses config class_weights to set element wise sample_weight.
+    Wraps keras CategoricalAccuracy to work on logits. """
+
+    def __init__(self, name='cat_acc_zero_weights'):
+        """ Creates CategoricalAccuracyZeroWeights metric
+        :param name: Name of the metric
+        :type name: str
+        """
+
+        super().__init__(name=name, dtype=tf.float32)
+        self.metric = None
+        self.class_weights = None
+
+    def init_from_config(self, model_config=None):
+        super().init_from_config(model_config)
+
+        if model_config is not None and 'class_weights' in model_config:
+            self.class_weights = model_config['class_weights']
+
+        self.metric = tf.keras.metrics.CategoricalAccuracy()
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        self.assert_initialized()
+        if self.class_weights is not None:
+            sample_weight = tf.reduce_sum(tf.multiply(
+                tf.cast(y_true, y_pred.dtype), self.class_weights),
+                                          axis=-1)
+
+        return self.metric.update_state(y_true, y_pred, sample_weight)
+
+    def result(self):
+        self.assert_initialized()
+
+        return self.metric.result()
+
+    def reset_states(self):
+        self.assert_initialized()
+
+        return self.metric.reset_states()
+
+    def get_config(self):
+        self.assert_initialized()
+
+        return self.metric.get_config()
+
+
+    
 class CroppedMetric(tf.keras.metrics.Metric):
     """ Wraps a metric. Crops the labels to match the logits size. """
 
@@ -156,3 +265,4 @@ class MCCMetric(InitializableMetric):
         self.assert_initialized()
 
         return self.metric.get_config()
+

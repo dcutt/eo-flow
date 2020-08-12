@@ -8,9 +8,10 @@ from marshmallow.validate import OneOf, ContainsOnly
 
 from ..base import BaseModel
 
-from .losses import CategoricalCrossEntropy, CategoricalFocalLoss, JaccardDistanceLoss, TanimotoDistanceLoss
+from .losses import (CategoricalCrossEntropy, CategoricalCrossEntropyZeroWeights, CategoricalFocalLoss,
+                     JaccardDistanceLoss, TanimotoDistanceLoss)
 from .losses import cropped_loss
-from .metrics import MeanIoU, InitializableMetric, CroppedMetric, MCCMetric
+from .metrics import MeanIoU, CategoricalAccuracyZeroWeights, MeanIoUZeroWeights,InitializableMetric, CroppedMetric, MCCMetric
 from .callbacks import VisualizationCallback
 
 logging.basicConfig(level=logging.INFO,
@@ -20,6 +21,7 @@ logging.basicConfig(level=logging.INFO,
 # Available losses. Add keys with new losses here.
 segmentation_losses = {
     'cross_entropy': CategoricalCrossEntropy,
+    'cross_entropy_zero_weights' : CategoricalCrossEntropyZeroWeights,
     'focal_loss': CategoricalFocalLoss,
     'jaccard_loss': JaccardDistanceLoss,
     'tanimoto_loss': TanimotoDistanceLoss
@@ -29,7 +31,9 @@ segmentation_losses = {
 # Available metrics. Add keys with new metrics here.
 segmentation_metrics = {
     'accuracy': lambda: tf.keras.metrics.CategoricalAccuracy(name='accuracy'),
+    'accuracy_zero_weights': CategoricalAccuracyZeroWeights,
     'iou': lambda: MeanIoU(default_max_classes=32),
+    'iou_zero_weights' : lambda: MeanIoUZeroWeights(default_max_classes=32),
     'precision': tf.keras.metrics.Precision,
     'recall': tf.keras.metrics.Recall,
     'mcc': MCCMetric
